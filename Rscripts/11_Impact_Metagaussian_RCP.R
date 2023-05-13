@@ -6,6 +6,8 @@ ConfigureEnv();
 
 # Set -up the ouput
 
+dir_recons <- "/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/hydro_outputmodels_Revision_Mar23/ClassicalModels_only_discharge/"
+dir_rcp_recons <- "/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/hydro_outputmodels_Revision_Mar23/climate_rcp_simulations/ClassicalModels_only_discharge/"
 
 out <- load_MLOutput(dir_recons, dir_rcp_recons)
 data_all <- out$RCP
@@ -22,9 +24,9 @@ dff$model <- "Historical"
 # apply the probabilistic model to each RCP, model 
 prepare_input <- function(dd, TT){
 
-  s_vars <- c("predictions","PREVAH","t2mmax","prec","spei_1","spei_3","spei_6","STI_1")
+  s_vars <- c("predictions","PREVAH","t2mmax","prec","spi_3","spei_3","STI_1")
   
-  
+  dd <- create_season_UP(dd,"Station")
   #filter the years of the selected period
   dd_yy <- dd%>%dplyr::filter(format(date,"%Y")>=TT[1] & format(date,"%Y")<=TT[2])
 
@@ -87,63 +89,50 @@ run_all <- function(l_rcp_tt, TT, Fdir, i_vars, nvars, cases, SS){
 
 
 
-# Extra process ---
-plot_pdfs_rcp <- function(out, out_hist, name_com, TT){
-  
-  # extract the data
-  l_pdfs  <- lapply(out, function(x) lapply(x, function(y) y$df_pdfs))
-  l_hist <- lapply(out_hist, function(x) lapply(x, function(y) y$df_pdfs))
-  df_pdfs <- reshape2::melt(l_pdfs, id=names(l_pdfs[[1]][[1]]))
-  df_hist <- reshape2::melt(l_hist, id=names(l_hist[[1]][[1]]))
-  names(df_pdfs) <- names(df_hist) <-  c(names(l_pdfs[[1]][[1]]), "model", "RCP")
-  
-  # compute means
-  #df_rcp_mm <- df_pdfs%>%group_by( station,compound, type, RCP)%>%dplyr::summarise(m_mu=mean(mu), m_sig=mean(sig), m_PDF=mean(PDF), m_condPDF=mean(C_PDF))
-  #df_hist_mm <- df_hist%>%group_by( station,compound, type, RCP)%>%dplyr::summarise(m_mu=mean(mu), m_sig=mean(sig), m_PDF=mean(PDF), m_condPDF=mean(C_PDF))
-  
-  df_all <- reshape2::melt(list("RCP"=df_pdfs, "Hist"=df_hist), id=names(df_pdfs))
-  names(df_all) <- c(names(df_pdfs), "data")
-  
-  
-  l_types <- c("-1.9/1.9","-1.6/1.6","-1.3/1.3","-0.8/0.8")
-  new_legend <- c("Mild", "Moderate", "Severe", "Extreme")
-  
-  # df_all$station[df_all$station =="Kraftwerke Mauvoisin AG"] <- "Mauvoisin AG"
-  # df_all$station[df_all$station =="KW Rheinfelden CH"] <- "Rheineau"
-  
-  p <-  df_all%>%dplyr::filter(compound%in%l_types)%>%
-   # group_by(station, compound, RCP)%>%
-   # dplyr::summarise(C_PDF = mean(C_PDF, na.rm=TRUE), PDF = mean(PDF, na.rm=TRUE), mu = mean(mu), sig = mean(sig))%>%
-    ggplot2::ggplot(aes(C_PDF, y=RCP, color=compound, fill=compound))+
-    geom_density_ridges(alpha=0.15)  + facet_wrap( ~station, ncol=3) + 
-    scale_fill_manual(values = c( "#009E73", "#F0E442", "#F46D43","#9E0142"), name=name_com, labels = new_legend) +
-    scale_color_manual(values = c("#009E73", "#F0E442", "#F46D43", "#9E0142"),  name=name_com, labels = new_legend) + 
-    ylab("") +
-    xlab("SHPI") +
-    ggtitle(TT) + 
-    theme(strip.text = element_text(size=12), axis.text = element_text(size=10)) + 
-    theme_bw()
-  
-  return(p)
-}
-
 
 ### compare distributions #####
 
-compare_distributions <- function(out, out_hist){
+compare_distributions <- function(out, out_hist,do_boostrap=TRUE){
   
   l_types <- c("-1.9/1.9","-1.6/1.6","-1.3/1.3","-0.8/0.8")
-  func <- function(x){
-    xx <- merge(x[[1]], x[[2]], by = c("station", "compound"))
-    xx <- xx[,c("compound","station","C_PDF.x","C_PDF.y")]
-    xx$Means<- xx%>%dplyr::select_if(is.numeric)%>%rowMeans()
-    return(xx[,c("compound","station","Means")])
+
+  fun_rowmean <- function(x, y_types){
+    # Function to calculate the ensemble means
+    xl <- lapply(x, function(y) y%>%dplyr::filter(compound%in%l_types)%>%dplyr::select(c("compound","station","PDF")))
+    #for (i in 1:length(xl)){
+    #  names(xl[[i]]) <- c("compound", "station",names(xl[i]))}
+    xl_comp <- lapply(xl, function(x) split(x,f=x$compound))
+    xl_comp <- rev_list(xl_comp)
+    xl_stat <- lapply(xl_comp, function(x) lapply(x, function(y) split(y,f=y$station)))
+    xl_stat <- lapply(xl_stat, function(x) rev_list(x))
+    xl_stat <- lapply(xl_stat, function(x) lapply(x, function(y) lapply(y, function(z) z%>%dplyr::select(c("PDF")))))
+   
+    rmean <- lapply(xl_stat, function(x) lapply(x, function(y) y%>%bind_cols()%>%rowMeans()))
+    df_mean <- reshape2::melt(rmean)
+    names(df_mean) <- c("PDF","station","compound")
+    return(df_mean)
+  }
+  
+  fun_bootstr <- function(x,y, N=1000){
+    
+    xt <- x - mean(x) 
+    yt <- y - mean(y) 
+    
+    boot.t <- c(1:N)
+    for (i in 1:N){
+      sample.x <- sample(xt,replace=TRUE)
+      sample.y <- sample(yt,replace=TRUE)
+      boot.t[i] <- t.test(sample.x,sample.y)$statistic
     }
+    p_h0 <-  (1 + sum(abs(boot.t) >= abs(t.test(x,y)$statistic))) / (N+1) 
+    
+    return(p_h0)
+  }
   
   # extract the data
   l_pdfs  <- lapply(out, function(x) lapply(x, function(y) y$df_pdfs))
   l_pdfs <- lapply(l_pdfs, function(x) lapply(x, function(y) y%>%dplyr::filter(compound%in%l_types)))
-  rcp_pdfs_means <- lapply(l_pdfs, func)
+  rcp_pdfs_means <- lapply(l_pdfs, fun_rowmean)
   
   l_hist <- lapply(out_hist, function(x) lapply(x, function(y) y$df_pdfs))
   l_hist <- lapply(l_hist, function(x) lapply(x, function(y) y%>%dplyr::filter(compound%in%l_types)))
@@ -151,63 +140,88 @@ compare_distributions <- function(out, out_hist){
   dfhist <- l_hist$Historical$Historical[,c("compound","station","C_PDF")]
   names(dfhist) <- c("compound","station", "historical")
   # change the names
-  names(rcp_pdfs_means$RCP26) <- c("compound","station","RCP26")
-  names(rcp_pdfs_means$RCP45) <- c("compound","station","RCP45")
-  names(rcp_pdfs_means$RCP85) <- c("compound","station","RCP85")
+  names(rcp_pdfs_means$RCP26) <- c("RCP26","station","compound")
+  names(rcp_pdfs_means$RCP45) <- c("RCP45","station","compound")
+  names(rcp_pdfs_means$RCP85) <- c("RCP85","station","compound")
   dfs <- cbind(rcp_pdfs_means$RCP26,"RCP45" = rcp_pdfs_means$RCP45$RCP45, "RCP85" = rcp_pdfs_means$RCP85$RCP85, "historical" = dfhist$historical)
   
-  pvals <- dfs%>%group_by(compound, station)%>%dplyr::summarise(p_value1 = t.test(RCP26, RCP45)$p.value,
-                                                             p_value26h = t.test(RCP26, historical)$p.value, 
-                                                             p_value2 = t.test(RCP26, RCP85)$p.value, 
-                                                             p_value45h = t.test(RCP45, historical)$p.value, 
-                                                             p_value3 = t.test(RCP45,RCP85)$p.value,
-                                                             p_value85h = t.test(RCP85, historical)$p.value)
+  # Pvalues without bootstrap
+  if (do_boostrap){
+    
+    l_stat <- split(dfs, f=dfs$station)
+    l_pv26 <- l_pv45 <- l_pv85 <- list()
+    for(i in 1:length(l_stat)){
+      
+      l_pv26[[i]] <- l_stat[[i]]%>%group_by(compound)%>%dplyr::group_map(~fun_bootstr(.x$RCP26, .x$historical))
+      l_pv45[[i]] <- l_stat[[i]]%>%group_by(compound)%>%dplyr::group_map(~fun_bootstr(.x$RCP45, .x$historical))
+      l_pv85[[i]] <- l_stat[[i]]%>%group_by(compound)%>%dplyr::group_map(~fun_bootstr(.x$RCP85, .x$historical))
+      names(l_pv26[[i]]) <-  names(l_pv45[[i]]) <-  names(l_pv85[[i]]) <- unique( l_stat[[i]]$compound)
+    }
+    
+     names(l_pv26) <- names(l_pv45) <- names(l_pv85) <- names(l_stat)
+     d_pvals <- reshape2::melt(list("p_value26h"=l_pv26," p_value45h"=l_pv45, "p_value85h"=l_pv85))
+     names(d_pvals) <- c("pval","compound","station","case")
+     tm_pvals <- d_pvals%>%pivot_wider(names_from = case, values_from = "pval")
+     pvals <- tm_pvals[order(tm_pvals$compound),]
+     
+    }else{
+  
+    pvals <- dfs%>%group_by(compound, station)%>%dplyr::summarise(p_value26h = t.test(RCP26, historical)$p.value, 
+                                                               p_value45h = t.test(RCP45, historical)$p.value, 
+                                                               p_value85h = t.test(RCP85, historical)$p.value)
+    }
+  
+  
   
   return(pvals)
 
+
+  
   
 }
   
 # run the model for each case
 l_cases <- c("DryHot", "DryCold")
 #i_vars <- c("pred_randomforest","SPI3","STI")
-i_vars <- c("predictions","spei_3","STI_1")
+i_vars <- c("predictions","spi_3","STI_1")
 nvars <- c("SPI3","STI", "Prob")
 
-Fdir <- "../../Results/Hydro_project/Analysis_Updates_Nov22/ClassicalModels_2predictors/MetaGaussian/RCP/AMJJAS/SPI3_STI1/"
+Fdir <- "../../Results/Hydro_project/hydro_outputmodels_Revision_Mar23/MetaGaussian/RCP/AMJJAS/spi_3_STI1/"
+# Fdir <- "../../Results/Hydro_project/Analysis_Updates_Nov22/ClassicalModels_2predictors/MetaGaussian/RCP/AMJJAS/SPI3_STI1/"
+
+
 SS <- "AMJJAS"
+
 out_hist <- run_all(l_historical, T1, Fdir, i_vars, nvars, "DryHot", SS) 
 out_t1 <- run_all(l_rcp_t1, T1, Fdir, i_vars, nvars, "DryHot", SS) 
 out_t2 <- run_all(l_rcp_t2, T2, Fdir, i_vars, nvars, "DryHot", SS)
 out_t3 <- run_all(l_rcp_t3, T3, Fdir, i_vars, nvars, "DryHot", SS)
 
-p1_spei <- plot_pdfs_rcp(out_t1, out_hist, "SPI3/STI", paste(T1[1], T1[2],sep="-"))
+
+# Compare distributions-statistical significance
+pval_t1 <- compare_distributions(out_t1, out_hist, do_boostrap = FALSE)
+pvalt1 <- setNames(data.frame(pval_t1), c("compound","station","RCP26","RCP45","RCP85"))
+pvalt1 <- pvalt1%>%pivot_longer(!c(compound, station), names_to="RCP", values_to = "pval")
+
+pval_t2 <- compare_distributions(out_t2, out_hist, do_boostrap = FALSE)
+pvalt2 <- setNames(data.frame(pval_t2), c("compound","station","RCP26","RCP45","RCP85"))
+pvalt2 <- pvalt2%>%pivot_longer(!c(compound, station), names_to="RCP", values_to = "pval")
+
+pval_t3 <- compare_distributions(out_t3, out_hist, do_boostrap = FALSE)
+pvalt3 <- setNames(data.frame(pval_t3), c("compound","station","RCP26","RCP45","RCP85"))
+pvalt3 <- pvalt3%>%pivot_longer(!c(compound, station), names_to="RCP", values_to = "pval")
+
+
+p1_spei <- plot_pdfs_rcp(out_t1, out_hist, pvalt1, "SPI3/STI", paste(T1[1], T1[2],sep="-"))
 ggsave(p1_spei, file=paste0(Fdir, "PDFS_1981-2021.png", sep=""), width = 10, height = 6)
-p2_spei <- plot_pdfs_rcp(out_t2, out_hist, "SPI3/STI", paste(T2[1], T2[2],sep="-"))
+p2_spei <- plot_pdfs_rcp(out_t2, out_hist, pvalt2, "SPI3/STI", paste(T2[1], T2[2],sep="-"))
 ggsave(p2_spei, file=paste0(Fdir, "PDFS_2031-2070.png", sep=""), width = 10, height = 6)
-p3_spei <- plot_pdfs_rcp(out_t3, out_hist, "SPI3/STI", paste(T3[1], T3[2],sep="-"))
+p3_spei <- plot_pdfs_rcp(out_t3, out_hist, pvalt3, "SPI3/STI", paste(T3[1], T3[2],sep="-"))
 ggsave(p3_spei, file=paste0(Fdir, "PDFS_2059-2099.png", sep=""), width = 10, height = 6)
 
 
 
 
-# Using SSI
-Fdir <- "../../Results/Hydro_project/Analaysis_Feb22/MetaGaussian/RCP/AMJJAS/SSI1_STI1/"
-dir.create(Fdir)
-SS <- "AMJJAS"
-i_vars <- c("predictions","SSI1","STI_1")
-nvars <- c("SSI","STI", "Prob")
-out_ssi_hist <- run_all(l_historical, T1, Fdir, i_vars, nvars, "DryHot",SS) 
-out_ssi_t1 <- run_all(l_rcp_t1, T1, Fdir, i_vars, nvars, "DryHot",SS) 
-out_ssi_t2 <- run_all(l_rcp_t2, T2, Fdir, i_vars, nvars, "DryHot",SS)
-out_ssi_t3 <- run_all(l_rcp_t3, T3, Fdir, i_vars, nvars, "DryHot",SS)
-
-p1_ssi <- plot_pdfs_rcp(out_ssi_t1, out_ssi_hist, "SSI1/STI", paste(T1[1], T1[2],sep="-"))
-ggsave(p1_ssi, file=paste0(Fdir, "PDFS_1981-2021.png", sep=""), width = 10, height = 6)
-p2_ssi <- plot_pdfs_rcp(out_ssi_t2, out_ssi_hist, "SSI1/STI", paste(T2[1], T2[2],sep="-"))
-ggsave(p2_ssi, file=paste0(Fdir, "PDFS_2031-2070.png", sep=""), width = 10, height = 6)
-p3_ssi <- plot_pdfs_rcp(out_ssi_t3, out_ssi_hist, "SSI1/STI", paste(T3[1], T3[2],sep="-"))
-ggsave(p3_ssi, file=paste0(Fdir, "PDFS_2059-2099.png", sep=""), width = 10, height = 6)
 
 
 

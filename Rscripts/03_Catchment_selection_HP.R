@@ -3,7 +3,7 @@ setwd("~/Documents/OCCR/scripts/R")
 source("./config/ConfigureEnv.R")
 ConfigureEnv();
 
-# ----------------Open discharge Envidat 
+# ----------------Open discharge Envidat->PREVAH 
 sh_file <- "/Users/noeliaotero/Documents/OCCR/data/Envidat/catchment_shapes/ch500_trans_wgs84.shp"
 nc <- st_make_valid(st_read(sh_file, quiet=TRUE))
 
@@ -69,7 +69,9 @@ m_swiss <- ggplot2::ggplot(st_geometry(nc)) +
   xlab("") + ylab("")+
   theme_void()
 # ggsave(m_swiss, file="../../Results/Hydro_project/map_CH_shapes.png", width = 12, height = 8)
-
+#######################
+# MAP SUBMISSION 1
+#########################
 mp <- ggplot2::ggplot(st_geometry(nc)) +  
   geom_sf(fill=ifelse(nc$OBJECTID%in%IDS_up,"lightblue","white"), lwd=0.2) +
   geom_point(data=meta_final, aes(x=lon, y=lat), col="black", size=3, shape=8) + 
@@ -79,6 +81,7 @@ mp <- ggplot2::ggplot(st_geometry(nc)) +
   theme_void()
 
 ggsave(mp, file="../../Results/Hydro_project/map_shapes_update_Mauvoison.png", width = 12, height = 8)
+
 
 
 # Add Mauvoisin and Leventina
@@ -92,6 +95,132 @@ mp_extra <- ggplot2::ggplot(st_geometry(nc)) +
   geom_text_repel(data=meta_final,aes(x=lon, y=lat, label=name_p),min.segment.length = Inf, seed = 42, box.padding = 0.5, size=5) + 
   xlab("") + ylab("")+
   theme_void()
+
+
+########################################################################
+# For the revised version we need to update the Rheinfelden catchment
+# Rhein catchment: UPdates: use the subcatchments!  
+########################################################################
+
+f_sh_rhein <-  "../../../OCCR/data/Rhein_shapefiles/142378.shp"
+sh_rein <- st_read(f_sh_rhein)
+centroides <- sf::st_centroid(nc)
+
+id_int <-   sf::st_intersection(sh_rein, centroides) %>% 
+       sf::st_set_geometry(NULL)
+
+IDs_rhein <- id_int$OBJECTID
+
+# check 
+ggplot() + 
+  geom_sf(data=nc, fill=ifelse(nc$OBJECTID%in%c(id_int$OBJECTID),"lightblue","white"), color="black") +
+  # overlay the whole Rhein 
+  geom_sf(data=sh_rein, fill="light yellow", color="red", alpha=0.2) + theme_bw()
+
+
+IDS_up_rhein <- IDS_up
+IDS_up_rhein <- IDS_up_rhein[IDS_up_rhein!=150] # remove the old Rheinfelden ID
+IDS_up_rhein <- c(IDS_up_rhein,IDs_rhein)
+
+# # select the area as well
+ids <-  nc[nc$OBJECTID%in%IDs_rhein,]
+ids$OBJECTID <- as.integer(ids$OBJECTID)
+df_IDS <- data.frame(IDS_up_rhein)
+#  Need to adapt the names from the metadata
+new_metadata_with_rhein <- meta_final[meta_final$name_p != "KW Rheinfelden CH",]
+
+# # Add the data from BFU
+new_metadata_with_rhein[6,] <- meta_final[meta_final$name_p == "KW Rheinfelden CH",]
+# # add more lines for the subchat
+
+for( i in 1:length(df_IDS$IDS_up_rhein)){
+  ix <- which(nc$OBJECTID%in%df_IDS$IDS_up_rhein[i])
+  df_IDS[i,"Area"] <- nc[ix, "Shape_Area"]$Shape_Area
+}
+
+df_IDS$name_p <- NA
+df_IDS$name_p[1:5] <- new_metadata_with_rhein$name_p[1:5]
+df_IDS$name_p[6:length(df_IDS$IDS_up_rhein)] <- new_metadata_with_rhein$name_p[6]
+
+final_pw <- merge(final_pw, df_IDS, id="name_p")
+write.csv(df_IDS, file="../../data/Output_data/csv/IDS_with_Rhein_UP.csv",row.names=FALSE)
+
+###########################################
+# Create shapefiles of each catchement
+############################################
+dir_sh <- "/Users/noeliaotero/Documents/OCCR/data/Shapefiles_powerplants/"
+
+
+Rheinfelden_sh <- nc[nc$OBJECTID%in%c(id_int$OBJECTID),] 
+st_write(Rheinfelden_sh,  paste(dir_sh,"Rheinfelden/Rheinfelden_wgs84.shp",sep=""))
+
+Blenio_sh <- nc[nc$OBJECTID%in%c(81,1),] 
+st_write(Blenio_sh,  paste(dir_sh,"Blenio/Blenio_new_wgs84.shp",sep=""))
+
+ElectraMassa <- nc[nc$OBJECTID%in%c(260),] 
+st_write(ElectraMassa,  paste(dir_sh,"Electra-Massa/Electra-Massa_wgs84.shp",sep=""))
+
+Leventina <- nc[nc$OBJECTID%in%c(83,274),] 
+st_write(Leventina,  paste(dir_sh,"Leventina/Leventina_new_wgs84.shp",sep=""))
+
+Emosson <- nc[nc$OBJECTID%in%c(100),] 
+st_write(Emosson,  paste(dir_sh,"Emosson/Emosson_wgs84.shp",sep=""))
+#######
+# plot
+######
+# ggplot() + 
+#   geom_sf(data=nc, fill=ifelse(Emosson$OBJECTID, Blenio_sh$OBJECTID, Leventina$OBJECTID, ElectraMassa$OBJECTID, Rheinfelden_sh$ ,"lightblue","white"), color="black") +
+#   # overlay the whole Rhein 
+#   geom_sf(data=sh_rein, fill="light yellow", color="red", alpha=0.2) + theme_bw()
+
+
+######################################
+# Double-check with Balmer database 
+######################################
+proj_env <- CRS("+proj=somerc +lat_0=46.95240555555556                              
+  +lon_0=7.439583333333333 +k_0=1 +x_0=600000 +y_0=200000 
+  +ellps=bessel +towgs84=674.374,15.056,405.346,0,0,0,0 +units=m +no_defs")
+# WGS84--regular--
+prj.LatLong <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84")
+
+# read files
+scheme_names <- readxl::read_xlsx("../../data/fromBettina/BalmerDatabase/SchemesNames_Balmer.xlsx")
+# Check which ID (FROM BALMER DB):
+mauvoisin_ID <- scheme_names[grep("Mauv",scheme_names$SCHEME_NAM),"SCHEME_ID"]$SCHEME_ID
+Emosson_ID <- scheme_names[grep("Emosson",scheme_names$SCHEME_NAM),"SCHEME_ID"]$SCHEME_ID
+ElectraMassa_ID <- scheme_names[grep("Electra Massa",scheme_names$SCHEME_NAM),"SCHEME_ID"]$SCHEME_ID
+Blenio_ID <- scheme_names[grep("Blenio",scheme_names$SCHEME_NAM),"SCHEME_ID"]$SCHEME_ID
+Leventina_ID <- c(224.1, 224.2, 224.3, 224.4) #scheme_names[grep("Stalvedro",scheme_names$SCHEME_NAM),"SCHEME_ID"]$SCHEME_ID
+Rheinfelden_ID <- 65.1 #scheme_names[grep("Rheinfelden",scheme_names$SCHEME_NAM),"SCHEME_ID"]$SCHEME_ID
+
+IDs_Balmer <- c(mauvoisin_ID, Emosson_ID, ElectraMassa_ID, Blenio_ID, Leventina_ID, Rheinfelden_ID)
+
+balm_nc <- st_read("../../data/fromBettina/BalmerDatabase/HydroGIS_Bettina/EZG_BalmerDischarge_region.shp")
+st_crs(balm_nc) <- proj_env
+new_ezg_trans <-  st_transform(balm_nc, prj.LatLong) 
+st_centroid(new_ezg_trans)
+# 
+ezg_balmer <- readOGR("../../data/fromBettina/BalmerDatabase/HydroGIS_Bettina/EZG_BalmerDischarge_region.shp")
+raster::crs(ezg_balmer) <- proj_env
+ezg_trans <- spTransform(ezg_balmer, prj.LatLong)
+
+plot(ezg_trans, col=ifelse(ezg_trans$SCHEME_ID%in%IDs_Balmer,"yellow","white"), axes=TRUE)
+points(meta_final$lon, meta_final$lat,col="red", pch=8, cex=1)
+
+
+st_write(new_ezg_trans, dsn = "../../data/fromBettina/BalmerDatabase/HydroGIS_Bettina/EZG_BalmerDischarge_region_W84.shp", layer = "ID", driver = "ESRI Shapefile")
+
+
+
+
+
+
+##### Save the shapefile of Rhine within PREVAH
+Rhein_shapefiles <- nc[nc$OBJECTID%in%c(id_int$OBJECTID),]
+file_sh <-  "../../data/Envidat/st_Rhein.shp"
+st_write(Rhein_shapefiles, dsn = file_sh, layer = "ID", driver = "ESRI Shapefile")
+# test open
+test <- st_read(file_sh)
 
 ####################################################################################################
 ###################This part is not needed anymore##################################################

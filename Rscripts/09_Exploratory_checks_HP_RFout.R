@@ -5,9 +5,13 @@ source("./config/ConfigureEnv.R")
 ConfigureEnv();
 
 # Set -up the ouput
-dir_recons <- '/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/hydro_outputmodels_Nov22/simulations_PREVAH/ClassicalModels/'
-dir_rcp_recons <- '/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/hydro_outputmodels_Nov22/simulations_PREVAH/climate_rcp_simulations/ClassicalModels//'
-dirout <- "../../Results/Hydro_project/Analysis_Updates_Nov22/ClassicalModels_2predictors//"
+dir_recons <- '/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/hydro_outputmodels_Revision_Mar23/ClassicalModels_only_discharge/'
+dir_rcp_recons <- '/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/hydro_outputmodels_Revision_Mar23/climate_rcp_simulations/ClassicalModels_only_discharge/'
+dirout <- "../../Results/Hydro_project/hydro_outputmodels_Revision_Mar23/ClassicalModels_only_discharge/"
+
+# dir_recons <- '/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/hydro_outputmodels_Nov22/simulations_PREVAH/ClassicalModels_only_discharge/'
+# dir_rcp_recons <- '/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/hydro_outputmodels_Nov22/simulations_PREVAH/climate_rcp_simulations/ClassicalModels_only_discharge//'
+# dirout <- "../../Results/Hydro_project/Analysis_Updates_Nov22/ClassicalModels_only_discharge//"
 dir.create(dirout, showWarnings = FALSE)
 
 
@@ -15,6 +19,8 @@ dir.create(dirout, showWarnings = FALSE)
 load("/Users/noeliaotero/Documents/OCCR/data/Output_data/daily_generationunit_eic_entsoe.Rda")
 
 out <- load_MLOutput(dir_recons, dir_rcp_recons)
+
+
 
 data_all <- out$RCP
 data_all$Unnamed..0 <- NULL
@@ -77,6 +83,14 @@ pl_yr <- df_summary_production%>%dplyr::filter(RCP%in%c("Historical","Observed")
   theme_bw()
 
 ggsave(pl_yr, file=paste(dirout,"annual_means.png",sep=""),width = 14, height = 8)
+
+pl_2016yr <- df_summary_production%>%dplyr::filter(RCP%in%c("Historical","Observed") & extended_seas == "annual" & year>"2015")%>%ggplot2::ggplot(aes(year, production, fill=RCP)) + 
+  geom_bar(stat = "identity",position="dodge") +
+  facet_wrap(~Station, ncol=3, scales="free") +
+  scale_fill_brewer(palette = "Set2", name="data", label =c("Predicted","Observed")) +
+  ylab("Hydropower production [GWh]")+ xlab("")+
+  theme_bw()
+ggsave(pl_2016yr, file=paste(dirout,"annual_means_train.png",sep=""),width = 14, height = 8)
 # Seasons
 pl_seas <- data_withref_1981_2021%>%group_by(Station, season, RCP, model)%>%
   dplyr::summarise(production=mean(generation))%>%dplyr::filter(RCP%in%c("Historical"))%>%
@@ -164,33 +178,96 @@ ggsave(hp, file=paste(dirout,"monthly_hp_production_with_discharge.png",sep=""),
 
 # Normalize everything 
 min_max_norm <- function(x) {
-  (x - min(x)) / (max(x) - min(x))
+  (x - min(x, na.rm=T)) / (max(x, na.rm=T) - min(x, na.rm=T))
 }
 
+# pred_normalised <- data_withref_1981_2021%>%dplyr::filter(RCP%in%c("Historical", "Observed") & format(date, "%Y") > "2015")%>%
+#   dplyr::group_by(Station, month=format(date,"%m"))%>%
+#   dplyr::mutate(norm_generation = min_max_norm(generation),  norm_discharge = min_max_norm(PREVAH))
+# pred_sum_normalised <-  pred_normalised%>%dplyr::group_by(Station, RCP, month=format(date,"%m"))%>%
+#   dplyr::summarise(norm_generation = mean(norm_generation, na.rm=T), norm_discharge= mean(norm_discharge, na.rm=T))
+
 pred_normalised <- data_withref_1981_2021%>%dplyr::filter(RCP%in%c("Historical", "Observed") & format(date, "%Y") > "2015")%>%
-  dplyr::group_by(Station, month=format(date,"%m"))%>%
-  dplyr::mutate(norm_generation = min_max_norm(generation),  norm_discharge = min_max_norm(PREVAH))
-pred_sum_normalised <-  pred_normalised%>%dplyr::group_by(Station, RCP, month=format(date,"%m"))%>%
-  dplyr::summarise(norm_generation = mean(norm_generation, na.rm=T), norm_discharge= mean(norm_discharge))
+  dplyr::group_by(Station, month=format(date,"%m"), RCP)%>%
+  dplyr::summarise(generation = mean(generation, na.rm=T), discharge= mean(PREVAH, na.rm=T))
+  
+pred_normalised <- data.frame(pred_normalised)
+df_normalised <-  pred_normalised%>%dplyr::group_by(Station, RCP)%>%
+  dplyr::mutate(norm_generation = min_max_norm(generation), norm_discharge= min_max_norm(discharge))
 
 
+df_normalised$Station <- factor(df_normalised$Station , levels=c("AET Leventina","Blenio (OFIBLE)","KW Rheinfelden CH",
+                                                                                   "Electra-Massa (EM)", "Emosson (ESA)", "Kraftwerke Mauvoisin AG" ))
+levels(df_normalised$Station) <- new_names
 
-hp_normalised <-  pivot_wider(pred_sum_normalised, names_from = RCP, values_from = norm_generation)%>%ggplot2::ggplot() +
-  geom_line(aes(x = month, y=Observed, group=Station, colour = "Hydropower production (ML)")) +
-  geom_point(aes(x = month, y=Observed, group=Station, colour = "Hydropower production (ML)")) +
-  geom_line(aes(x = month, y=Historical, group=Station), linetype = "dashed", color="black", size = 0.8) +
- # geom_point(aes(x = month, y=Historical, group=Station, colour = "Hydropower production (ENTSO-E)")) +
-  geom_line( aes(x=month, y=norm_discharge, group=Station, colour = "Discharge")) +
-  geom_point( aes(x=month, y=norm_discharge, group=Station, colour = "Discharge")) +
+hp_normalised <- df_normalised%>%ggplot2::ggplot(aes(x=month, y=norm_generation, colour=RCP, group=RCP)) + 
+  geom_line() + geom_line( aes(x=month, y=norm_discharge, group=Station, colour = "Discharge")) + 
   facet_wrap(~Station, scales="free") + 
-  scale_colour_manual(name = " ", values = c("Hydropower production (ML)" = "red", "Discharge" = "blue")) + 
+  scale_linetype_manual(values=c("doted","dashed")) + 
+  scale_colour_manual(name = " ", labels=c("Discharge", "HP(ENTSO-E)","HP(Modelled)"), values = c("blue", "red","black")) + 
   theme_classic() +   theme(axis.text = element_text(size =12), 
                             axis.title = element_text(size=12),
-                            strip.text = element_text(size = 12)) + xlab("") + ylab("Normalized production, Normalized discharge")
+                            strip.text = element_text(size = 12)) + xlab("") + 
+  ylab("Normalized production, Normalized discharge") +
+  theme_bw()
 
-ggsave(hp_normalised, file=paste(dirout,"monthly_hp_production_with_discharge_normalised.png",sep=""),width = 14, height = 8)
+# hp_normalised <-  pivot_wider(df_normalised, names_from = RCP, values_from = norm_generation)%>%ggplot2::ggplot() +
+#   geom_line(aes(x = month, y=Observed, group=Station, colour = "Hydropower production (ML)")) +
+#   geom_point(aes(x = month, y=Observed, group=Station, colour = "Hydropower production (ML)")) +
+#   geom_line(aes(x = month, y=Historical, group=Station), linetype = "dashed", color="black", size = 0.8) +
+#  # geom_point(aes(x = month, y=Historical, group=Station, colour = "Hydropower production (ENTSO-E)")) +
+#   geom_line( aes(x=month, y=norm_discharge, group=Station, colour = "Discharge")) +
+#   geom_point( aes(x=month, y=norm_discharge, group=Station, colour = "Discharge")) +
+#   facet_wrap(~Station, scales="free") + 
+#   scale_colour_manual(name = " ", values = c("Hydropower production (ML)" = "red", "Discharge" = "blue")) + 
+#   theme_classic() +   theme(axis.text = element_text(size =12), 
+#                             axis.title = element_text(size=12),
+#                             strip.text = element_text(size = 12)) + xlab("") + ylab("Normalized production, Normalized discharge")
 
-  t2m <- dff%>%group_by(Station, M= format(date, "%m"))%>%dplyr::summarize(T2m=mean(t2m))%>%
+ggsave(hp_normalised, file=paste(dirout,"HP_production_with_discharge_normalised.png",sep=""),width = 14, height = 8)
+
+
+# TEST DISCHARGE:
+
+
+data_withref_1981_2021%>%dplyr::filter(RCP=="Observed" & format(date, "%Y") > "2015")%>%group_by(mon=format(date,"%m"), Station)%>%
+  dplyr::summarise(dis=mean(PREVAH, na.rm=TRUE))%>%ggplot2::ggplot() + 
+  geom_line(aes(mon, dis, group=Station)) + facet_wrap(~Station, ncol=3) + ylab("Discharge(day/mm)") + theme_bw()
+
+# Normalized
+pred_normalised%>%group_by(mon=format(date,"%m"), Station)%>%
+  dplyr::summarise(dis=mean(norm_discharge, na.rm=TRUE))%>%ggplot2::ggplot() + 
+  geom_line(aes(mon, dis, group=Station)) + facet_wrap(~Station, ncol=3) + ylab("Normalised-Discharge(day/mm)") + theme_bw()
+
+# Normalised after
+X <- data_withref_1981_2021%>%dplyr::filter(RCP=="Observed" & format(date, "%Y") > "2015")%>%group_by(mon=format(date,"%m"), Station)%>%
+  dplyr::summarise(dis=mean(PREVAH, na.rm=TRUE))
+X$norm <- min_max_norm(X$dis)
+X%>%ggplot2::ggplot() + 
+  geom_line(aes(mon, norm, group=Station)) + facet_wrap(~Station, ncol=3) + ylab("Normalised-Discharge(day/mm)") + theme_bw()
+
+
+######################
+# Compare HP linetype
+######################
+hp_l <- data_withref_1981_2021%>%dplyr::filter(RCP%in%c("Historical","Observed") & format(date, "%Y") > "2015")%>%
+   # data_withref_1981_2021%>%dplyr::filter(RCP%in%c("Historical","Observed"))%>%
+  group_by(Station, M= format(date, "%m"))%>%dplyr::group_by(Station, month=format(date,"%m"), model, RCP)%>%
+  dplyr::summarise(m = mean(generation, na.rm=T))%>%
+  ggplot2::ggplot(aes(x=month, y=m, color=model, group=model)) + 
+  geom_line() + facet_wrap(~Station, scales="free") +
+  scale_color_manual(values=c("blue","black")) + 
+  theme_classic() +   theme(axis.text = element_text(size =12), 
+                            axis.title = element_text(size=12),
+                            strip.text = element_text(size = 12)) + xlab("") + 
+  ylab("HP[GWh]")
+
+ggsave(hp_l, file=paste(dirout,"monthly_hp_production_observed_pred.png",sep=""),width = 14, height = 8)
+
+
+
+
+t2m <- dff%>%group_by(Station, M= format(date, "%m"))%>%dplyr::summarize(T2m=mean(t2m))%>%
   ggplot(aes(x=M, y=T2m, color=Station, group=Station)) + geom_line(size=0.6) + scale_color_brewer(palette = "Set1", name="") +   
   theme_classic() +   theme(axis.text = element_text(size =12), axis.title = element_text(size=12)) + xlab("") + ylab("[ºC]")
 
@@ -247,7 +324,7 @@ data_withref_1981_2021%>%group_by(Station, M= format(date, "%m"), RCP)%>%dplyr::
 
 
 # select the periods and 
-fun_period_checks <- function(dff, data_all, TT, vplot, typeP="line", myleg){
+fun_period_checks <- function(dff, data_all, TT, vplot, typeP="line", myleg, dirout){
   
   if (any(names(data_all) == "generation")){data_all <- data_all%>%dplyr::rename("production"="generation")}
   
@@ -392,25 +469,25 @@ data_all$Station <- factor(data_all$Station , levels=c("AET Leventina","Blenio (
 levels(data_all$Station) <- new_names
 
   
-p_dis_t1 <- fun_period_checks(dff,data_all, T1, "PREVAH", "range", "[mm/day]")
-p_dis_t2 <- fun_period_checks(dff,data_all, T2, "PREVAH", "range", "[mm/day]")
-p_dis_t3 <- fun_period_checks(dff,data_all, T3, "PREVAH", "range", "[mm/day]")
+p_dis_t1 <- fun_period_checks(dff,data_all, T1, "PREVAH", "range", "[mm/day]", dirout)
+p_dis_t2 <- fun_period_checks(dff,data_all, T2, "PREVAH", "range", "[mm/day]", dirout)
+p_dis_t3 <- fun_period_checks(dff,data_all, T3, "PREVAH", "range", "[mm/day]", dirout)
 
 # Production
-p_hp_t1 <- fun_period_checks(dff,data_all, T1, "production", "range", "[GWh]")
-p_hp_t2 <- fun_period_checks(dff,data_all, T2, "production", "range", "[GWh]")
-p_hp_t3 <- fun_period_checks(dff,data_all, T3, "production", "range", "[GWh]")
+p_hp_t1 <- fun_period_checks(dff,data_all, T1, "production", "range", "[GWh]", dirout)
+p_hp_t2 <- fun_period_checks(dff,data_all, T2, "production", "range", "[GWh]", dirout)
+p_hp_t3 <- fun_period_checks(dff,data_all, T3, "production", "range", "[GWh]", dirout)
 
 # temperature
-p_tmax_t1 <- fun_period_checks(dff,data_all, T1, "t2mmax", "range", "[ºC]")
-p_tmax_t2 <- fun_period_checks(dff,data_all, T2, "t2mmax", "range", "[ºC]")
-p_tmax_t3 <- fun_period_checks(dff,data_all, T3, "t2mmax", "range", "[ºC]")
+p_t2m_t1 <- fun_period_checks(dff,data_all, T1, "t2m", "range", "[ºC]", dirout)
+p_t2m_t2 <- fun_period_checks(dff,data_all, T2, "t2m", "range", "[ºC]", dirout)
+p_t2m_t3 <- fun_period_checks(dff,data_all, T3, "t2m", "range", "[ºC]", dirout)
 
 
 # precipitation
-p_prec_t1 <- fun_period_checks(dff,data_all, T1, "prec", "range", "[mm]")
-p_prec_t2 <- fun_period_checks(dff,data_all, T2, "prec", "range", "[mm]")
-p_prec_t3 <- fun_period_checks(dff,data_all, T3, "prec", "range", "[mm]")
+p_prec_t1 <- fun_period_checks(dff,data_all, T1, "prec", "range", "[mm]", dirout)
+p_prec_t2 <- fun_period_checks(dff,data_all, T2, "prec", "range", "[mm]", dirout)
+p_prec_t3 <- fun_period_checks(dff,data_all, T3, "prec", "range", "[mm]", dirout)
 
 
 

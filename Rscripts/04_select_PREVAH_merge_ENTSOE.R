@@ -8,7 +8,10 @@ ConfigureEnv();
 # read the selected catchments
 # sel_pw <- read.csv("../../data/Output_data/csv/IDS_envidat.csv")
 # Update catchment for Mauvoison
-sel_pw <- read.csv("../../data/Output_data/csv/IDS_updated_Mauv_envidat.csv")
+# sel_pw <- read.csv("../../data/Output_data/csv/IDS_updated_Mauv_envidat.csv")
+# New Update using Rhein!
+sel_pw <- read.csv("../../data/Output_data/csv/IDS_with_Rhein_UP.csv")
+
 metafinal <- read.csv("../../data/Output_data/csv/metadata_final.csv")
 raw_env <- read.table("../../data/Envidat/ch_500_eval.RGS_version_bilanz_81_21")
 

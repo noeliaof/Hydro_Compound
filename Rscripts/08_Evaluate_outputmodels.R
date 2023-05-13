@@ -5,7 +5,11 @@ source("./config/ConfigureEnv.R")
 ConfigureEnv();
 
 
-dir_recons <- "/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/hydro_outputmodels_Nov22/simulations_PREVAH/ClassicalModels/"
+dir_recons <- "/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/hydro_outputmodels_Revision_Mar23/ClassicalModels_only_discharge/"
+
+#dir_recons <- "/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/hydro_outputmodels_Nov22/simulations_PREVAH/ClassicalModels/"
+
+
 l_files <- list.files(dir_recons, pattern = "csv")
 station_name <- tools::file_path_sans_ext(l_files)
 

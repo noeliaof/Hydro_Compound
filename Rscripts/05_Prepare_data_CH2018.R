@@ -8,10 +8,15 @@ ConfigureEnv();
 # read the selected catchments
 # sel_pw <- read.csv("../../data/Output_data/csv/IDS_envidat.csv")
 
-sel_pw <- read.csv("../../data/Output_data/csv/IDS_updated_Mauv_envidat.csv")
-metafinal <- read.csv("../../data/Output_data/csv/metadata_final.csv")
+# sel_pw <- read.csv("../../data/Output_data/csv/IDS_updated_Mauv_envidat.csv")
+
+# New Update using Rhein!
+sel_pw <- read.csv("../../data/Output_data/csv/IDS_with_Rhein_UP.csv")
+
+metafinal   <- read.csv("../../data/Output_data/csv/metadata_final.csv")
+total_names <- metafinal$name_p
 # Adding Rhineau to metafinal
-total_names <- c(metafinal$name_p, "Rhineau")
+# total_names <- c(metafinal$name_p, "Rhineau")
 
 
 # read shapefiles
@@ -30,9 +35,9 @@ names(d_dis) <- m_names
 
 #### Need to add the proper variables --- 
 # open pr and temperature files
-pr_ch <- "../../data/meteoswiss/CH2018_selected_catch/pr/used/"
-tas_ch <- "../../data/meteoswiss/CH2018_selected_catch/tas/used/"
-tasmax_ch <- "../../data/meteoswiss/CH2018_selected_catch/tasmax/used/"
+pr_ch <- "../../data/meteoswiss/CH2018_selected_catch/pr/"
+tas_ch <- "../../data/meteoswiss/CH2018_selected_catch/tas/"
+tasmax_ch <- "../../data/meteoswiss/CH2018_selected_catch/tasmax/"
 
 
 # extract model names for each meteo
@@ -47,29 +52,31 @@ pr_dat <- fun_check_NA(pr_dat)
 tas_dat <- fun_check_NA(tas_dat)
 tasmax_dat <- fun_check_NA(tasmax_dat)
 
-# Load Rhineau
-Rhineau_pr_ch <- "../../data/meteoswiss/CH2018_selected_catch/Rhineau/pr/"
-Rhineau_tas_ch <- "../../data/meteoswiss/CH2018_selected_catch/Rhineau/tas/"
-Rhineau_tasmax_ch <- "../../data/meteoswiss/CH2018_selected_catch/Rhineau/tasmax/"
-
-Rhineau_pr_dat <- read_ch2018_met(Rhineau_pr_ch)
-Rhineau_pr_dat <- lapply(Rhineau_pr_dat, function(x) {  names(x) <- c("date","tp")
-                  x})
-Rhineau_pr_dat <- Rhineau_pr_dat[names(Rhineau_pr_dat)%in%names(dat_models)]
-Rhineau_tas_dat <- read_ch2018_met(Rhineau_tas_ch)
-Rhineau_tas_dat <- lapply(Rhineau_tas_dat, function(x) {  names(x) <- c("date","t2m")
-x})
-Rhineau_tas_dat <- Rhineau_tas_dat[names(Rhineau_tas_dat)%in%names(dat_models)]
-Rhineau_tasmax_dat <- read_ch2018_met(Rhineau_tasmax_ch)
-Rhineau_tasmax_dat <- lapply(Rhineau_tasmax_dat, function(x) {  names(x) <- c("date","t2mmax")
-                    x})
-Rhineau_tasmax_dat <- Rhineau_tasmax_dat[names(Rhineau_tasmax_dat)%in%names(dat_models)]
-
-# Need to add discharge from the new-update Rheinfelden
-
-Rhineau_discharge_dat <- lapply(d_dis, function(x) x[,c("date", "KW Rheinfelden CH")])
-Rhineau_discharge_dat <- lapply(Rhineau_discharge_dat, function(x) {  names(x) <- c("date","discharge")
-x})
+##################
+# Load Rhineau : no need anymore
+##################
+# Rhineau_pr_ch <- "../../data/meteoswiss/CH2018_selected_catch/pr/"
+# Rhineau_tas_ch <- "../../data/meteoswiss/CH2018_selected_catch/tas/"
+# Rhineau_tasmax_ch <- "../../data/meteoswiss/CH2018_selected_catch/tasmax/"
+# 
+# Rhineau_pr_dat <- read_ch2018_met(Rhineau_pr_ch)
+# Rhineau_pr_dat <- lapply(Rhineau_pr_dat, function(x) {  names(x) <- c("date","tp")
+#                   x})
+# Rhineau_pr_dat <- Rhineau_pr_dat[names(Rhineau_pr_dat)%in%names(dat_models)]
+# Rhineau_tas_dat <- read_ch2018_met(Rhineau_tas_ch)
+# Rhineau_tas_dat <- lapply(Rhineau_tas_dat, function(x) {  names(x) <- c("date","t2m")
+# x})
+# Rhineau_tas_dat <- Rhineau_tas_dat[names(Rhineau_tas_dat)%in%names(dat_models)]
+# Rhineau_tasmax_dat <- read_ch2018_met(Rhineau_tasmax_ch)
+# Rhineau_tasmax_dat <- lapply(Rhineau_tasmax_dat, function(x) {  names(x) <- c("date","t2mmax")
+#                     x})
+# Rhineau_tasmax_dat <- Rhineau_tasmax_dat[names(Rhineau_tasmax_dat)%in%names(dat_models)]
+# 
+# # Need to add discharge from the new-update Rheinfelden
+# 
+# Rhineau_discharge_dat <- lapply(d_dis, function(x) x[,c("date", "KW Rheinfelden CH")])
+# Rhineau_discharge_dat <- lapply(Rhineau_discharge_dat, function(x) {  names(x) <- c("date","discharge")
+# x})
 
 ###############
 # merge files #
@@ -77,26 +84,31 @@ x})
 # apply to each model
 dat_models        <- lapply(1:length(pr_dat), function(i) merge_variables(dis = d_dis[[i]], pr = pr_dat[[i]], tas = tas_dat[[i]], tasmax = tasmax_dat[[i]], metafinal))
 names(dat_models) <- names(pr_dat)
+
+###############Skip this######################
 # Prepare Rhienau and merge
 
-rhineau_models <- lapply(1:length(Rhineau_tas_dat), function(i) { list(Rhineau_pr_dat[[i]], Rhineau_tas_dat[[i]], Rhineau_tasmax_dat[[i]], Rhineau_discharge_dat[[i]])%>%
-                           reduce(left_join, id = "date")})
-names(rhineau_models) <- names(Rhineau_tas_dat)
-
-l_rhineau <- list("Rhineau"= rhineau_models)
-
-new_rhineau <- fun_list(l_rhineau)
-new_rhineau <- new_rhineau[names(new_rhineau)%in%names(dat_models)]
+# rhineau_models <- lapply(1:length(Rhineau_tas_dat), function(i) { list(Rhineau_pr_dat[[i]], Rhineau_tas_dat[[i]], Rhineau_tasmax_dat[[i]], Rhineau_discharge_dat[[i]])%>%
+#                            reduce(left_join, id = "date")})
+# names(rhineau_models) <- names(Rhineau_tas_dat)
+# 
+# l_rhineau <- list("Rhineau"= rhineau_models)
+# 
+# new_rhineau <- fun_list(l_rhineau)
+# new_rhineau <- new_rhineau[names(new_rhineau)%in%names(dat_models)]
 
 # Now concatenate to dat_models
-dat_tot_models <- mapply(append, dat_models, new_rhineau, SIMPLIFY = F)
+# dat_tot_models <- mapply(append, dat_models, new_rhineau, SIMPLIFY = F)
+dat_tot_models <- dat_models
 
 # create lags --this takes a while
+# Now total names 
+
 dd_pw <- dd_final <- list()
 for (i in 1:length(dat_models)){
   for (j in 1:length(total_names)){
-    # dd_pw[[j]] <- add_SCE_SPEI_todata(dat_models[[i]][[j]])
-    dd_pw[[j]] <- add_SCE_SPEI_todata(dat_tot_models[[i]][[j]])
+    dd_pw[[j]] <- add_SCE_SPEI_todata(dat_models[[i]][[j]])
+    # dd_pw[[j]] <- add_SCE_SPEI_todata(dat_tot_models[[i]][[j]])
   }
   
   dd_final[[i]] <- dd_pw
@@ -137,6 +149,22 @@ for (i in 1:length(dd_rev)){
 
 names(dd_all) <- names(dd_rev)
 
+
+
+# save data
+dout <-  "../../data/Output_data/csv/data_CH2018_tomodel/"
+
+for( i in 1:length(metafinal$name_p)){
+  pw <- metafinal$name_p[i]
+  d <- paste(dout,pw, sep="")
+  dir.create(d, showWarnings = FALSE)
+  l_pw <- dd_rev[[which(names(dd_rev)==pw)]]
+  lapply(1:length(l_pw), function(i) write.csv(l_pw[[i]], file = paste(d, "/",names(l_pw[i]), ".csv", sep="")))
+  
+}
+
+
+####################################################
 #Make some checks with hist
 sel_pw <- read.csv("../../data/Output_data/csv/IDS_updated_Mauv_envidat.csv")
 metafinal <- read.csv("../../data/Output_data/csv/metadata_final.csv")
@@ -153,18 +181,4 @@ mau <- his_81_21$`Kraftwerke Mauvoisin AG`%>%group_by(month=format(date,"%m"))%>
 mod_mau <- dd_final$`Kraftwerke Mauvoisin AG`$`DMI-HIRHAM-ECEARTH-EUR11-RCP26`%>%group_by(month=format(date,"%m"))%>%dplyr::summarise(D=mean(discharge))
 
 p <- ggplot(mau, aes(x=month, D, gruop=1)) + geom_line() 
-
-# save data
-dout <-  "../../data/Output_data/csv/data_CH2018_tomodel/"
-
-for( i in 1:length(metafinal$name_p)){
-  pw <- metafinal$name_p[i]
-  d <- paste(dout,pw, sep="")
-  dir.create(d, showWarnings = FALSE)
-  l_pw <- dd_rev[[which(names(dd_rev)==pw)]]
-  lapply(1:length(l_pw), function(i) write.csv(l_pw[[i]], file = paste(d, "/",names(l_pw[i]), ".csv", sep="")))
-  
-}
-
-
 

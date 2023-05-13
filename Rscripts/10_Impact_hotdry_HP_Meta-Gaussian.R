@@ -7,7 +7,9 @@ ConfigureEnv();
 # --------Observations-----------
 #load data
 # dir_recons <- '/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/outmodels/observed_discharge/Classical/meteo_HPcatch/daily_complete/'
-dir_recons <- "/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/hydro_outputmodels_Nov22/simulations_PREVAH/ClassicalModels/"
+#dir_recons <- "/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/hydro_outputmodels_Nov22/simulations_PREVAH/ClassicalModels/"
+dir_recons <- "/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/hydro_outputmodels_Revision_Mar23/ClassicalModels_only_discharge/"
+
 # dir_month_recons <- '/Users/noeliaotero/Documents/OCCR/data/Output_data/csv/outmodels/Classical/meteo_HPcatch/monthly/'
 
 # ---------Using PreVAH-----------
@@ -19,7 +21,7 @@ station_name <- tools::file_path_sans_ext(l_files)
 r_data <- lapply(1:length(l_files), function(i) read.csv(paste(dir_recons, l_files[i], sep="")))
 names(r_data) <- station_name
 
-
+r_data <- lapply(r_data, function(x) x%>%dplyr::select(c("date","season","eic_g","name_p","generation","pred_rf_Predefinesplit","PREVAH","t2mmax","prec","spi_3","spei_3","STI_1")))
 dff    <- reshape2::melt(r_data, id=names(r_data[[1]]))
 names(dff) <- c(names(r_data[[1]]),"Station")
 dff$date <- as.Date(dff$date)
@@ -29,7 +31,7 @@ dff <- create_extended_season(dff)
 names(dff)[which(names(dff)=="pred_rf_Predefinesplit")] <- "predictions"
 
 # s_vars <- c("predictions","discharge","t2mmax","prec","spei_1","spei_3","spei_6","STI_1","SSI1")
-s_vars <- c("predictions","PREVAH","t2mmax","prec","spei_1","spei_3","spei_6","SPI3","STI_1")
+s_vars <- c("predictions","PREVAH","t2mmax","prec","spi_3","spei_3","STI_1")
 # Get monthly data
 dff_mon <- dff%>%group_by(date=format(date,"%Y-%m"), season, extended_seas, Station)%>%summarise_at(vars(s_vars), mean, na.rm=T)
 
@@ -44,7 +46,11 @@ dff_mon <- dff%>%group_by(date=format(date,"%Y-%m"), season, extended_seas, Stat
 # plot PDF 
 l_cases <- c("Dryhot", "DryCold")
 #i_vars <- c("pred_randomforest","SPI3","STI")
-i_vars <- c("predictions","SPI3","STI_1")
+# i_vars <- c("predictions","SPI3","STI_1")
+# nvars <- c("SPI3","STI", "Prob")
+
+# test SPEI
+i_vars <- c("predictions","spi_3","STI_1")
 nvars <- c("SPI3","STI", "Prob")
 
 cat ("Run for", i_vars)
@@ -55,7 +61,10 @@ l_mon <- split(dff_mon, f=dff_mon$Station)
 r_data_summer <- lapply(l_mon, function(x) x%>%dplyr::filter(extended_seas=="AMJJAS"))
 # r_data_winter <- lapply(l_mon, function(x) x%>%dplyr::filter(extended_seas=="ONDJFM"))
 
-dout_s <- "../../Results/Hydro_project/Analysis_Updates_Nov22/ClassicalModels_2predictors/MetaGaussian/Discharge/AMJJAS/mon_SPI3_STI/"
+#dout_s <- "../../Results/Hydro_project/Analysis_Updates_Nov22/ClassicalModels_2predictors/MetaGaussian/Discharge/AMJJAS/mon_SPI3_STI/"
+#############UPDATES
+dout_s <- "../../Results/Hydro_project/hydro_outputmodels_Revision_Mar23/ClassicalModels_only_discharge/MetaGaussian/Discharge/AMJJAS/mon_spi_3_STI//"
+
 dir.create(dout_s, recursive = T, showWarnings = F)
 # dout_s <- "../../Results/Hydro_project/Analaysis_Feb22/MetaGaussian/Observed/AMJJAS/mon_SPI3_STI/"
 # dout_w <- "../../Results/Hydro_project/Analaysis_Feb22/MetaGaussian/Observed/ONDJFM/mon_SPI3_STI/"

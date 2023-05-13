@@ -20,25 +20,40 @@ shp_transf  <- spTransform(shp, swiss_pj)
 # Save new shapefiles
 writeOGR(shp_transf,  "ch500_trans_swiss_pj.shp",layer = "ID", driver = "ESRI Shapefile")
 
+sh_mau <- readOGR("/Users/noeliaotero/Documents/OCCR/data/Themakart2022/Mauvosin/catchMauvoisin_region.shp")
+# transform
+raster::crs(sh_mau) <- proj_env
+shp_mau_transf  <- spTransform(sh_mau, swiss_pj)
+writeOGR(shp_mau_transf,  "/Users/noeliaotero/Documents/OCCR/data/Themakart2022/Mauvosin/Mau_trans_swiss_pj.shp",layer = "ID", driver = "ESRI Shapefile")
+
+
 library(bfsMaps)
 
+# options(bfsMaps.base="")
 options(bfsMaps.base="/Users/noeliaotero/Documents/OCCR/data/Themakart2022/")
-
-RequireMap(c("polg.map", "bezk.map", "kant.map", "stkt.pnt","prevah.map"))
+RequireMap(c("polg.map", "bezk.map", "kant.map", "stkt.pnt","prevah.map", "mauvoisin.map"))
 
 # Plot municipalities
 #plot(tkart$polg.map, border="grey85" )
 #plot(tkart$bezk.map, border="grey55")
-plot(tkart$prevah.map, border="grey55", lwd =1)
+plot(tkart$prevah.map, border="grey55", lwd =0.5)
+plot(tkart$mauvoisin.map, border="grey55", lwd =1, col="grey")
 plot(tkart$kant.map, border="black", lwd=1, add=TRUE )
 
 AddLakes()
 AddRivers()
 
 
-sh_id <- read.csv("../../data/Output_data/csv/IDS_updated_Mauv_envidat.csv")
+# sh_id <- read.csv("../../data/Output_data/csv/IDS_updated_Mauv_envidat.csv")
+# Update: consider the whole Rhein
+sh_id <- read.csv("../../data/Output_data/csv/IDS_with_Rhein_UP.csv")
 
-plot(tkart$prevah.map[as.integer(tkart$prevah.map$OBJECTID)%in%sh_id$IDS,],col="gray94", add=TRUE )
+# plot all but Rheinfelden
+
+plot(tkart$prevah.map[as.integer(tkart$prevah.map$OBJECTID)%in%sh_id$IDS_up_rhein[!sh_id$name_p%in%c("KW Rheinfelden CH","Kraftwerke Mauvoisin AG")],],col="grey40", add=TRUE)
+# plot Rheinfelden
+plot(tkart$prevah.map[as.integer(tkart$prevah.map$OBJECTID)%in%sh_id$IDS_up_rhein[sh_id$name_p=="KW Rheinfelden CH"],],col="grey90", lwd="0.01",add=TRUE)
+
 
 ########################################
 # Add Envidat
